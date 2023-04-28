@@ -27,9 +27,27 @@ class GUIWindow(QMainWindow):
         self.label_bands.setText("Bands: ")
         self.label_bands.adjustSize()
         self.label_bands.move(50, 100)
+
+        self.b2 = QtWidgets.QPushButton(self)
+        self.b2.setText("Start")
+        self.b2.clicked.connect(self.button_start_clicked)
+        self.b2.adjustSize()
+        self.b2.move(50, 200)
+        
+        self.b2 = QtWidgets.QPushButton(self)
+        self.b2.setText("Stop")
+        self.b2.clicked.connect(self.button_stop_clicked)
+        self.b2.adjustSize()
+        self.b2.move(50, 250)
         
     def button_close_clicked(self):
         self.wapp.close()
+        
+    def button_start_clicked(self):
+        self.wapp.send("START")
+        
+    def button_stop_clicked(self):
+        self.wapp.send("STOP")
         
     def update_bands(self, bands):
         self.label_bands.setText("Bands: " + str(bands))

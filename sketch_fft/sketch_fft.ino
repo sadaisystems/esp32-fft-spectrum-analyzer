@@ -42,7 +42,8 @@ const String sb_email = SB_EMAIL;
 const String sb_password = SB_PASSWORD;
 bool upsert = false;
 
-const int sendingInterval = 60;
+int start_time;
+bool perfrom_fft = false;
 
 // Called when receiving any WebSocket message
 void onWebSocketEvent(uint8_t num,
@@ -69,8 +70,52 @@ void onWebSocketEvent(uint8_t num,
 
     // Echo text message back to client
     case WStype_TEXT:
-      Serial.printf("[%u] Text: %s\n", num, payload);
-      server.sendTXT(num, payload);
+    {
+      String recieved_text = (char*) payload;
+      // Serial.printf("[%u] Text: %s\n", num, payload);
+
+      if(recieved_text == "STOP") {
+        if(perfrom_fft == false) {
+          Serial.println("Recieved stop message, but FFT is already stopped");
+          break;
+        }
+
+        perfrom_fft = false;
+        Serial.println("Recieved stop message, stopping FFT");
+        // Create new row with stop time
+        String jsonOutString = "";
+        JsonObject sendObject = sendJson.to<JsonObject>();
+        float duration = (millis() - start_time) / 1000;
+        sendObject["duration"] = duration;
+
+        if(duration > 10) {
+          sendObject["is_music"] = true;
+        }
+        else {
+          sendObject["is_music"] = false;
+        }
+        
+        serializeJson(sendObject, jsonOutString);
+
+        int HTTPresponseCode = db.insert(sb_table, jsonOutString, upsert);
+        Serial.print("HTTP response code (SupaBase-insert): ");
+        Serial.println(HTTPresponseCode);
+        db.urlQuery_reset();
+
+      } else if(recieved_text == "START") {
+        if(perfrom_fft == true) {
+          Serial.println("Recieved start message, but FFT is already started");
+          break;
+        }
+        perfrom_fft = true;
+        start_time = millis();
+
+        Serial.println("Recieved start message, starting FFT");
+      }
+      else {
+        Serial.println("Recieved unknown message");
+      }
+    }
       break;
 
     // For everything else: do nothing
@@ -89,7 +134,7 @@ void onWebSocketEvent(uint8_t num,
 void setup() {
   Serial.begin(115200);
   // LED indicator of turned on/off
-  pinMode(5, OUTPUT);      // set the LED pin mode
+  // pinMode(2, OUTPUT);      // set the LED pin mode
   
   // FFT sampling period
   sampling_period_us = round(1000000 * (1.0 / SAMPLING_FREQ));
@@ -121,16 +166,9 @@ void setup() {
   // Supabase
   Serial.print("Connecting to Supabase .");
   db.begin(sb_url, sb_api_key);
-  // Create new row with start time
-  String jsonOutString = ""; 
-  JsonObject sendObject = sendJson.to<JsonObject>();
-  sendObject["duration"] = 0;
-  sendObject["is_music"] = true;
-  serializeJson(sendObject, jsonOutString);
-  int HTTPresponseCode = db.insert(sb_table, jsonOutString, upsert);
-  Serial.print("HTTP response code (SupaBase-insert): ");
-  Serial.println(HTTPresponseCode);
-  db.urlQuery_reset();
+
+  start_time = millis();
+
   delay(1000);
 }
 
@@ -138,16 +176,13 @@ void loop() {
     // WebServer part
     server.loop();
     // FFT part
+    if(!perfrom_fft) {
+      return;
+    }
+
     bool detected = performFFT();
     if(detected)
     {
-      // Print the band values
-      // Serial.print("Band values:");
-      // for(int i = 0; i < NUM_BANDS; i++){
-      //   Serial.print(" " + String(bandValues[i]));
-      // }
-      // Serial.println(); 
-
       // Send the band values to the client
       String jsonOutString = "";
       JsonObject sendObject = sendJson.to<JsonObject>();
@@ -162,12 +197,6 @@ void loop() {
       serializeJson(sendJson, jsonOutString);
       Serial.println(jsonOutString);
       server.broadcastTXT(jsonOutString);
-
-      // Supabase part
-      // int HTTPresponseCode = db.insert("bandTable", jsonOutString, upsert);
-      // Serial.print("HTTP response code (SupaBase): ");
-      // Serial.println(HTTPresponseCode);
-      // db.urlQuery_reset();
     }
     else {
       Serial.println("Nothing...");
