@@ -72,7 +72,6 @@ void onWebSocketEvent(uint8_t num,
     case WStype_TEXT:
     {
       String recieved_text = (char*) payload;
-      // Serial.printf("[%u] Text: %s\n", num, payload);
 
       if(recieved_text == "STOP") {
         if(perfrom_fft == false) {
@@ -133,9 +132,6 @@ void onWebSocketEvent(uint8_t num,
 
 void setup() {
   Serial.begin(115200);
-  // LED indicator of turned on/off
-  // pinMode(2, OUTPUT);      // set the LED pin mode
-  
   // FFT sampling period
   sampling_period_us = round(1000000 * (1.0 / SAMPLING_FREQ));
 
