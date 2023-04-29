@@ -1,5 +1,5 @@
-import os
-from supabase import create_client, Client
+from supabase import create_client
+
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -56,9 +56,10 @@ df_24h = df[df['ses_start'] > pd.to_datetime('now') - pd.to_timedelta(1, unit='d
 df_cumsum = df_24h[['ses_end', 'duration', 'is_music']].set_index('ses_end').sort_index()
 df_cumsum['duration_cumsum'] = df_cumsum.groupby('is_music')['duration'].cumsum()
 
-# fig = px.timeline(df_24h, x_start="ses_start", x_end="ses_end", y="duration", color="is_music")
-fig = px.area(df_cumsum, x=df_cumsum.index, y="duration_cumsum", color=df_cumsum['is_music'])
+fig = px.line(df_cumsum, x=df_cumsum.index, y="duration_cumsum", color=df_cumsum['is_music'])
 st.plotly_chart(fig, use_container_width=True)
+
+st.divider()
 
 st.markdown('# Average daily duration')
 df_1w = df[df['ses_start'] > pd.to_datetime('now') - pd.to_timedelta(7, unit='d')]
@@ -68,9 +69,21 @@ st.plotly_chart(fig, use_container_width=True)
 
 with st.sidebar:
     # Communication with ESP32
-    st.markdown('# ESP32 communication')
+    st.markdown('# Command center')
+    st.divider()
     
     display_text = ""
+    
+    st.markdown('## Dashboard')
+    
+    if st.button('Refresh data'):
+        get_plays_data.clear()
+        df = get_plays_data('playTable')
+        display_text = '[SUPABASE] Data refreshed'
+        print(display_text)
+    
+    st.divider()
+    st.markdown('## ESP32 connection')
     
     if st.button('Init connection'):
         wst = threading.Thread(target=wapp.run_forever)
@@ -98,5 +111,8 @@ with st.sidebar:
         display_text = '[ESP] FFT stopped'
         print(display_text)
     
+    st.divider()
+    st.markdown('## Logs')
+    
     if display_text != "":
-        st.write('Last log: ' + display_text)
+        st.write('**Last log:** ' + display_text)
