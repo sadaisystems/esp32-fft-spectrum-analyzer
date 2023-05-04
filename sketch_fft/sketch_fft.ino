@@ -12,13 +12,10 @@
 #define SAMPLING_FREQ   38000         // Hz, must be 40000 or less due to ADC conversion time. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
 #define AMPLITUDE       1000          // Depending on your audio source level, you may need to alter this value. Can be used as a 'sensitivity' control.
 #define AUDIO_IN_PIN    35            // Signal in on this pin
-
 #define NUM_BANDS       8             // Number of frequency bands to use
-
 #define NOISE           600           // Used as a crude noise filter, values below this are ignored
 
 unsigned int sampling_period_us;
-byte peak[] = {0,0,0,0,0,0,0,0};              // The length of these arrays must be >= NUM_BANDS
 int bandValues[] = {0,0,0,0,0,0,0,0};
 double vReal[SAMPLES];
 double vImag[SAMPLES];
@@ -28,11 +25,8 @@ arduinoFFT FFT = arduinoFFT(vReal, vImag, SAMPLES, SAMPLING_FREQ);
 // WIFI server stuff
 const char* ssid = WIFI_SSID;
 const char* password = WIFI_PASSWORD;
-
 WebSocketsServer server = WebSocketsServer(80);
-
 StaticJsonDocument<500> sendJson;
-StaticJsonDocument<500> receiveJson;
 
 // Supabase stuff
 Supabase db;
@@ -53,107 +47,7 @@ Adafruit_NeoPixel rgbWS = Adafruit_NeoPixel(numLED, pinDIN, NEO_GRB + NEO_KHZ800
 int start_time;
 bool perfrom_fft = false;
 
-// Called when receiving any WebSocket message
-void onWebSocketEvent(uint8_t num,
-                      WStype_t type,
-                      uint8_t * payload,
-                      size_t length) {
-
-  // Figure out the type of WebSocket event
-  switch(type) {
-
-    // Client has disconnected
-    case WStype_DISCONNECTED:
-      Serial.printf("[%u] Disconnected!\n", num);
-      break;
-
-    // New client has connected
-    case WStype_CONNECTED:
-      {
-        IPAddress ip = server.remoteIP(num);
-        Serial.printf("[%u] Connection from ", num);
-        Serial.println(ip.toString());
-      }
-      break;
-
-    // Echo text message back to client
-    case WStype_TEXT:
-    {
-      String recieved_text = (char*) payload;
-
-      if(recieved_text == "STOP") {
-        if(perfrom_fft == false) {
-          Serial.println("Recieved stop message, but FFT is already stopped");
-          break;
-        }
-
-        perfrom_fft = false;
-        Serial.println("Recieved stop message, stopping FFT");
-        // Create new row with stop time
-        String jsonOutString = "";
-        JsonObject sendObject = sendJson.to<JsonObject>();
-        float duration = (millis() - start_time) / 1000;
-        sendObject["duration"] = duration;
-
-        if(duration > 10) {
-          sendObject["is_music"] = true;
-        }
-        else {
-          sendObject["is_music"] = false;
-        }
-        
-        serializeJson(sendObject, jsonOutString);
-
-        int HTTPresponseCode = db.insert(sb_table, jsonOutString, upsert);
-        Serial.print("HTTP response code (SupaBase-insert): ");
-        Serial.println(HTTPresponseCode);
-        db.urlQuery_reset();
-
-        // neoPixel turn of the lights
-        for(int i = 0; i < numLED; i++) {
-          setRGB(0, 0, 0, i);
-        }
-        delay(500);
-      } else if(recieved_text == "START") {
-        if(perfrom_fft == true) {
-          Serial.println("Recieved start message, but FFT is already started");
-          break;
-        }
-        perfrom_fft = true;
-        start_time = millis();
-
-        Serial.println("Recieved start message, starting FFT");
-        
-        // neoPixel new connection indicator
-        for(int i = 0; i < numLED; i++) {
-          setRGB(255, 255, 255, i);
-          delay(100);
-        }
-        delay(500);
-        for(int i = 0; i < numLED; i++) {
-          setRGB(0, 0, 0, i);
-        }
-        delay(500);
-      }
-      else {
-        Serial.println("Recieved unknown message");
-      }
-    }
-      break;
-
-    // For everything else: do nothing
-    case WStype_BIN:
-    case WStype_ERROR:
-    case WStype_FRAGMENT_TEXT_START:
-    case WStype_FRAGMENT_BIN_START:
-    case WStype_FRAGMENT:
-    case WStype_FRAGMENT_FIN:
-    default:
-      break;
-  }
-}
-
-
+// -----------------------------------------------------------------MAIN FUNCTIONS-----------------------------------------------------------------
 void setup() {
   Serial.begin(115200);
   // FFT sampling period
@@ -184,8 +78,9 @@ void setup() {
   delay(1000);
 
   // Supabase
-  Serial.print("Connecting to Supabase .");
+  Serial.print("Connecting to Supabase...");
   db.begin(sb_url, sb_api_key);
+  Serial.println(" Connected");
 
   start_time = millis();
 
@@ -193,20 +88,7 @@ void setup() {
 
   // NeoPixel
   rgbWS.begin();
-  // 1 -> red color
-  setRGB(255, 0  , 0  , 0);
-  delay(500);
-  // 2 -> green color
-  setRGB(0  , 255, 0  , 1);
-  delay(500);
-  // 3 -> blue color
-  setRGB(0  , 0  , 255, 2);
-  delay(500);
-  // turn them of - black color
-  setRGB(0  , 0  , 0  , 0);
-  setRGB(0  , 0  , 0  , 1);
-  setRGB(0  , 0  , 0  , 2);
-  delay(500);
+  signalRGB('w');
 }
 
 void loop() {
@@ -278,7 +160,7 @@ void loop() {
       }
     }
 }
-
+// -----------------------------------------------------------------FFT FUNCTIONS-----------------------------------------------------------------
 bool performFFT() {
   // Reset bandValues[]
   for (int i = 0; i < NUM_BANDS; i++){
@@ -319,7 +201,7 @@ bool performFFT() {
 
   return notNoise;
 }
-
+// -----------------------------------------------------------------NeoPixel FUNCTIONS-----------------------------------------------------------------
 void setRGB(uint8_t r, uint8_t g, uint8_t b, int led_number) {
   uint32_t color = rgbWS.Color(r, g, b);
   // nastavení barvy pro danou LED diodu,
@@ -328,3 +210,141 @@ void setRGB(uint8_t r, uint8_t g, uint8_t b, int led_number) {
   // aktualizace barev na všech modulech
   rgbWS.show();
 }
+
+void signalRGB(char color){
+  uint8_t r, g, b;
+  switch (color)
+  {
+  case 'r':
+    r = 255;
+    g = 0;
+    b = 0;
+    break;
+  case 'g':
+    r = 0;
+    g = 255;
+    b = 0;
+    break;
+  case 'b':
+    r = 0;
+    g = 0;
+    b = 255;
+    break;
+  case 'w':
+    r = 255;
+    g = 255;
+    b = 255;
+    break;
+  default:
+    r = 0;
+    g = 0;
+    b = 0;
+    break;
+  }
+  for(int i = 0; i < numLED; i++) {
+    setRGB(r, g, b, i);
+    delay(100);
+  }
+  delay(1000);
+  for(int i = 0; i < numLED; i++) {
+    setRGB(0, 0, 0, i);
+  }
+}
+// -----------------------------------------------------------------WEBSERVER FUNCTIONS-----------------------------------------------------------------
+// Called when receiving any WebSocket message
+void onWebSocketEvent(uint8_t num,
+                      WStype_t type,
+                      uint8_t * payload,
+                      size_t length) {
+
+  // Figure out the type of WebSocket event
+  switch(type) {
+
+    // Client has disconnected
+    case WStype_DISCONNECTED:
+    {
+      Serial.printf("[%u] Disconnected!\n", num);
+      signalRGB('r');
+      break;
+    }
+
+    // New client has connected
+    case WStype_CONNECTED:
+      {
+        IPAddress ip = server.remoteIP(num);
+        Serial.printf("[%u] Connection from ", num);
+        Serial.println(ip.toString());
+
+        signalRGB('g');
+      }
+      break;
+
+    // Echo text message back to client
+    case WStype_TEXT:
+    {
+      String recieved_text = (char*) payload;
+
+      if(recieved_text == "STOP") {
+        if(perfrom_fft == false) {
+          Serial.println("Recieved stop message, but FFT is already stopped");
+          break;
+        }
+
+        perfrom_fft = false;
+        Serial.println("Recieved stop message, stopping FFT");
+        // Create new row in Supabase database
+        String jsonOutString = "";
+        JsonObject sendObject = sendJson.to<JsonObject>();
+        float duration = (millis() - start_time) / 1000;
+        sendObject["duration"] = duration;
+
+        if(duration > 10) {
+          sendObject["is_music"] = true;
+        }
+        else {
+          sendObject["is_music"] = false;
+        }
+        
+        serializeJson(sendObject, jsonOutString);
+
+        int HTTPresponseCode = db.insert(sb_table, jsonOutString, upsert);
+        Serial.print("HTTP response code (SupaBase-insert): ");
+        Serial.println(HTTPresponseCode);
+        db.urlQuery_reset();
+
+        // neoPixel turn of the lights
+        for(int i = 0; i < numLED; i++) {
+          setRGB(0, 0, 0, i);
+        }
+        delay(500);
+      } else if(recieved_text == "START") {
+        if(perfrom_fft == true) {
+          Serial.println("Recieved start message, but FFT is already started");
+          break;
+        }
+        perfrom_fft = true;
+        start_time = millis();
+
+        Serial.println("Recieved start message, starting FFT");
+        
+        // neoPixel new connection indicator
+        signalRGB('w');
+      }
+      else {
+        Serial.println("Recieved unknown message");
+      }
+    }
+      break;
+
+    // For everything else: do nothing
+    case WStype_BIN:
+    case WStype_ERROR:
+    case WStype_FRAGMENT_TEXT_START:
+    case WStype_FRAGMENT_BIN_START:
+    case WStype_FRAGMENT:
+    case WStype_FRAGMENT_FIN:
+    default:
+      break;
+  }
+}
+

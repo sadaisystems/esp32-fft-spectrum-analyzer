@@ -12,7 +12,7 @@ st.set_page_config(page_title='Dashboard', layout='centered', initial_sidebar_st
 
 def on_message(ws, message):
     bandJson = json.loads(message)
-    print('[ESP] Band amplitude measurments: ' + bandJson)
+    print(f'[ESP] Band amplitude measurments: {bandJson}')
     
 def on_close(ws, close_status_code, close_msg):
     print("[ESP] CLOSED")
