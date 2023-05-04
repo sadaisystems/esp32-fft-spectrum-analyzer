@@ -3,8 +3,11 @@
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 #include <ESP32_Supabase.h>
+#include <Adafruit_NeoPixel.h>
+
 #include "secrets.h"
 
+// FFT stuff
 #define SAMPLES         1024          // Must be a power of 2
 #define SAMPLING_FREQ   38000         // Hz, must be 40000 or less due to ADC conversion time. Determines maximum frequency that can be analysed by the FFT Fmax=sampleF/2.
 #define AMPLITUDE       1000          // Depending on your audio source level, you may need to alter this value. Can be used as a 'sensitivity' control.
@@ -12,12 +15,10 @@
 
 #define NUM_BANDS       8             // Number of frequency bands to use
 
-#define NOISE           200           // Used as a crude noise filter, values below this are ignored
+#define NOISE           600           // Used as a crude noise filter, values below this are ignored
 
-// Sampling and FFT stuff
 unsigned int sampling_period_us;
 byte peak[] = {0,0,0,0,0,0,0,0};              // The length of these arrays must be >= NUM_BANDS
-// int oldBarHeights[] = {0,0,0,0,0,0,0,0};
 int bandValues[] = {0,0,0,0,0,0,0,0};
 double vReal[SAMPLES];
 double vImag[SAMPLES];
@@ -42,6 +43,13 @@ const String sb_email = SB_EMAIL;
 const String sb_password = SB_PASSWORD;
 bool upsert = false;
 
+// NeoPixel stuff
+#define pinDIN 25
+#define numLED 8
+
+Adafruit_NeoPixel rgbWS = Adafruit_NeoPixel(numLED, pinDIN, NEO_GRB + NEO_KHZ800);
+
+// Gobal variables
 int start_time;
 bool perfrom_fft = false;
 
@@ -101,6 +109,11 @@ void onWebSocketEvent(uint8_t num,
         Serial.println(HTTPresponseCode);
         db.urlQuery_reset();
 
+        // neoPixel turn of the lights
+        for(int i = 0; i < numLED; i++) {
+          setRGB(0, 0, 0, i);
+        }
+        delay(500);
       } else if(recieved_text == "START") {
         if(perfrom_fft == true) {
           Serial.println("Recieved start message, but FFT is already started");
@@ -110,6 +123,17 @@ void onWebSocketEvent(uint8_t num,
         start_time = millis();
 
         Serial.println("Recieved start message, starting FFT");
+        
+        // neoPixel new connection indicator
+        for(int i = 0; i < numLED; i++) {
+          setRGB(255, 255, 255, i);
+          delay(100);
+        }
+        delay(500);
+        for(int i = 0; i < numLED; i++) {
+          setRGB(0, 0, 0, i);
+        }
+        delay(500);
       }
       else {
         Serial.println("Recieved unknown message");
@@ -166,6 +190,23 @@ void setup() {
   start_time = millis();
 
   delay(1000);
+
+  // NeoPixel
+  rgbWS.begin();
+  // 1 -> red color
+  setRGB(255, 0  , 0  , 0);
+  delay(500);
+  // 2 -> green color
+  setRGB(0  , 255, 0  , 1);
+  delay(500);
+  // 3 -> blue color
+  setRGB(0  , 0  , 255, 2);
+  delay(500);
+  // turn them of - black color
+  setRGB(0  , 0  , 0  , 0);
+  setRGB(0  , 0  , 0  , 1);
+  setRGB(0  , 0  , 0  , 2);
+  delay(500);
 }
 
 void loop() {
@@ -196,7 +237,46 @@ void loop() {
     }
     else {
       Serial.println("Nothing...");
-    }   
+    } 
+
+    // NeoPixel part
+    for(int i = 0; i < numLED; i++) {
+      if (bandValues == 0){
+        setRGB(0, 0, 0, i);
+        continue;
+      }
+      int displayValue = bandValues[i] / AMPLITUDE;
+      displayValue = map(displayValue, 0, 50, 0, 255);
+      switch (i)
+      {
+      case 0:
+        setRGB(0, 0, displayValue, i);
+        break;
+      case 1:
+        setRGB(0, displayValue / 2, displayValue, i);
+        break;
+      case 2:
+        setRGB(0, displayValue, 0, i);
+        break;
+      case 3:
+        setRGB(0, displayValue, displayValue / 2, i);
+        break;
+      case 4:
+        setRGB(displayValue, 0, 0, i);
+        break;
+      case 5:
+        setRGB(displayValue, 0, displayValue / 2, i);
+        break;
+      case 6:
+        setRGB(displayValue, displayValue / 2, 0, i);
+        break;
+      case 7:
+        setRGB(displayValue, displayValue, 0, i);
+        break;
+      default:
+        break;
+      }
+    }
 }
 
 bool performFFT() {
@@ -238,4 +318,13 @@ bool performFFT() {
   }
 
   return notNoise;
+}
+
+void setRGB(uint8_t r, uint8_t g, uint8_t b, int led_number) {
+  uint32_t color = rgbWS.Color(r, g, b);
+  // nastavení barvy pro danou LED diodu,
+  // číslo má pořadí od nuly
+  rgbWS.setPixelColor(led_number, color);
+  // aktualizace barev na všech modulech
+  rgbWS.show();
 }
