@@ -13,7 +13,7 @@
 #define AMPLITUDE       1000          // Depending on your audio source level, you may need to alter this value. Can be used as a 'sensitivity' control.
 #define AUDIO_IN_PIN    35            // Signal in on this pin
 #define NUM_BANDS       8             // Number of frequency bands to use
-#define NOISE           600           // Used as a crude noise filter, values below this are ignored
+#define NOISE           1000           // Used as a crude noise filter, values below this are ignored
 
 unsigned int sampling_period_us;
 int bandValues[] = {0,0,0,0,0,0,0,0};
